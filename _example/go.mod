@@ -5,7 +5,7 @@ go 1.21.7
 replace github.com/dadav/stampede => ../
 
 require (
-	github.com/go-chi/chi/v5 v5.0.11
+	github.com/go-chi/chi/v5 v5.2.0
 	github.com/dadav/stampede v0.5.1
 )
 
