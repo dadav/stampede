@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dadav/stampede"
 	"github.com/go-chi/cors"
-	"github.com/go-chi/stampede"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -66,11 +66,11 @@ func TestGet(t *testing.T) {
 }
 
 func TestHandler(t *testing.T) {
-	var numRequests = 30
+	numRequests := 30
 
 	var hits uint32
 	var expectedStatus int = 201
-	var expectedBody = []byte("hi")
+	expectedBody := []byte("hi")
 
 	app := func(w http.ResponseWriter, r *http.Request) {
 		// log.Println("app handler..")
@@ -170,7 +170,7 @@ func TestHash(t *testing.T) {
 
 func TestBypassCORSHeaders(t *testing.T) {
 	var expectedStatus int = 200
-	var expectedBody = []byte("hi")
+	expectedBody := []byte("hi")
 
 	var count uint64
 
@@ -204,7 +204,7 @@ func TestBypassCORSHeaders(t *testing.T) {
 
 	for i := 0; i < 10; i++ {
 		var wg sync.WaitGroup
-		var domainsHit = map[string]bool{}
+		domainsHit := map[string]bool{}
 
 		for _, domain := range domains {
 			wg.Add(1)
@@ -239,7 +239,6 @@ func TestBypassCORSHeaders(t *testing.T) {
 				mu.Unlock()
 
 				assert.Equal(t, "wakka", resp.Header.Get("X-Another-Header"))
-
 			}(domain)
 		}
 
