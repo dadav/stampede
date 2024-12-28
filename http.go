@@ -73,6 +73,114 @@ func HandlerWithKey(cacheSize int, ttl time.Duration, keyFunc func(r *http.Reque
 	}
 }
 
+func HandlerWithKeyAndCb(cacheSize int, ttl time.Duration, keyFunc func(r *http.Request) uint64, cbFunc func(bool, http.ResponseWriter, *http.Request) error, paths ...string) func(next http.Handler) http.Handler {
+	// mapping of url paths that are cacheable by the stampede handler
+	pathMap := map[string]struct{}{}
+	for _, path := range paths {
+		pathMap[strings.ToLower(path)] = struct{}{}
+	}
+
+	// Stampede handler with set ttl for how long content is fresh.
+	// Requests sent to this handler will be coalesced and in scenarios
+	// where there is a "stampede" or parallel requests for the same
+	// method and arguments, there will be just a single handler that
+	// executes, and the remaining handlers will use the response from
+	// the first request. The content thereafter will be cached for up to
+	// ttl time for subsequent requests for further caching.
+	h := stampedeWithCb(cacheSize, ttl, keyFunc, cbFunc)
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Cache all paths, as whitelist has not been provided
+			if len(pathMap) == 0 {
+				h(next).ServeHTTP(w, r)
+				return
+			}
+
+			// Match specific whitelist of paths
+			if _, ok := pathMap[strings.ToLower(r.URL.Path)]; ok {
+				// stampede-cache the matching path
+				h(next).ServeHTTP(w, r)
+			} else {
+				// no caching
+				next.ServeHTTP(w, r)
+			}
+		})
+	}
+}
+
+func stampedeWithCb(cacheSize int, ttl time.Duration, keyFunc func(r *http.Request) uint64, cbFunc func(bool, http.ResponseWriter, *http.Request) error) func(next http.Handler) http.Handler {
+	cache := NewCacheKV[uint64, responseValue](cacheSize, ttl, ttl*2)
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// cache key for the request
+			key := keyFunc(r)
+
+			// mark the request that actually processes the response
+			first := false
+
+			// process request (single flight)
+			respVal, err := cache.GetFresh(r.Context(), key, func() (responseValue, error) {
+				first = true
+				buf := bytes.NewBuffer(nil)
+				ww := &responseWriter{ResponseWriter: w, tee: buf}
+
+				next.ServeHTTP(ww, r)
+
+				val := responseValue{
+					headers: ww.Header(),
+					status:  ww.Status(),
+					body:    buf.Bytes(),
+
+					// the handler may not write header and body in some logic,
+					// while writing only the body, an attempt is made to write the default header (http.StatusOK)
+					skip: ww.IsHeaderWrong(),
+				}
+				return val, nil
+			})
+
+			// the first request to trigger the fetch should return as it's already
+			// responded to the client
+			if first {
+				cbFunc(false, w, r)
+				return
+			}
+
+			// handle response for other listeners
+			if err != nil {
+				// TODO: perhaps just log error and execute standard handler..?
+				panic(fmt.Sprintf("stampede: fail to get value, %v", err))
+			}
+
+			if respVal.skip {
+				return
+			}
+
+			header := w.Header()
+
+		nextHeader:
+			for k := range respVal.headers {
+				for _, match := range stripOutHeaders {
+					// Prevent any header in stripOutHeaders to override the current
+					// value of that header. This is important when you don't want a
+					// header to affect all subsequent requests (for instance, when
+					// working with several CORS domains, you don't want the first domain
+					// to be recorded an to be printed in all responses)
+					if match == k {
+						continue nextHeader
+					}
+				}
+				header[k] = respVal.headers[k]
+			}
+
+			cbFunc(true, w, r)
+			w.WriteHeader(respVal.status)
+			w.Write(respVal.body)
+		})
+	}
+}
+
 func stampede(cacheSize int, ttl time.Duration, keyFunc func(r *http.Request) uint64) func(next http.Handler) http.Handler {
 	cache := NewCacheKV[uint64, responseValue](cacheSize, ttl, ttl*2)
 
