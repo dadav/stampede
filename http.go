@@ -122,6 +122,7 @@ func stampedeWithCb(cacheSize int, ttl time.Duration, keyFunc func(r *http.Reque
 
 			// process request (single flight)
 			respVal, err := cache.GetFresh(r.Context(), key, func() (responseValue, error) {
+				cbFunc(false, w, r)
 				first = true
 				buf := bytes.NewBuffer(nil)
 				ww := &responseWriter{ResponseWriter: w, tee: buf}
@@ -143,7 +144,6 @@ func stampedeWithCb(cacheSize int, ttl time.Duration, keyFunc func(r *http.Reque
 			// the first request to trigger the fetch should return as it's already
 			// responded to the client
 			if first {
-				cbFunc(false, w, r)
 				return
 			}
 
