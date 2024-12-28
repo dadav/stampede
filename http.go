@@ -65,7 +65,6 @@ func HandlerWithKey(cacheSize int, ttl time.Duration, keyFunc func(r *http.Reque
 			if _, ok := pathMap[strings.ToLower(r.URL.Path)]; ok {
 				// stampede-cache the matching path
 				h(next).ServeHTTP(w, r)
-
 			} else {
 				// no caching
 				next.ServeHTTP(w, r)
@@ -79,7 +78,6 @@ func stampede(cacheSize int, ttl time.Duration, keyFunc func(r *http.Request) ui
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
 			// cache key for the request
 			key := keyFunc(r)
 
