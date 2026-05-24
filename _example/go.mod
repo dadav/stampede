@@ -1,12 +1,12 @@
 module example
 
-go 1.21.7
+go 1.23
 
 replace github.com/dadav/stampede => ../
 
 require (
-	github.com/go-chi/chi/v5 v5.0.11
 	github.com/dadav/stampede v0.5.1
+	github.com/go-chi/chi/v5 v5.3.0
 )
 
 require (
